@@ -2,7 +2,6 @@ const express = require('express');
 const mongoose = require('mongoose');
 require('dotenv').config();
 const cors = require('cors');
-const connectDB = require('./lib/db');
 const app = express();
 
 // Manual CORS headers middleware (runs before everything)
@@ -72,14 +71,6 @@ app.use((err, req, res, next) => {
 
   console.error('Error:', err);
 
-  // Handle MongoDB connection errors
-  if (err.name === 'MongoServerError' || err.name === 'MongooseError' || err.message?.includes('buffering timed out') || err.message?.includes('connect ECONNREFUSED') || err.message?.includes('serverSelectionTimeoutMS')) {
-    return res.status(503).json({
-      message: 'Database connection unavailable. Please check your MongoDB connection settings and ensure your IP is whitelisted in MongoDB Atlas.',
-      error: process.env.NODE_ENV === 'development' ? err.message : undefined
-    });
-  }
-
   // Handle payload too large errors (413)
   if (err.status === 413 || err.type === 'entity.too.large' || err.message?.includes('too large')) {
     return res.status(413).json({
@@ -94,10 +85,22 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Initialize MongoDB connection (uses cached connection pattern for serverless)
-// Connection is attempted in the background and cached for reuse
-if (process.env.MONGO_URL) {
-  connectDB().catch((err) => {
+// MongoDB connection with better error handling
+const connectDB = async () => {
+  // Check if MONGO_URL is set
+  if (!process.env.MONGO_URL) {
+    console.error('❌ MongoDB connection error: MONGO_URL environment variable is not set');
+    console.error('Please make sure you have a .env file with MONGO_URL configured');
+    return;
+  }
+
+  try {
+    await mongoose.connect(process.env.MONGO_URL, {
+      serverSelectionTimeoutMS: 10000, // Increased timeout
+      socketTimeoutMS: 45000,
+    });
+    console.log('✅ MongoDB connected successfully');
+  } catch (err) {
     console.error('❌ MongoDB connection error:', err.message);
 
     // Provide helpful troubleshooting information
@@ -115,11 +118,19 @@ if (process.env.MONGO_URL) {
       console.error('   - Go to MongoDB Atlas → Network Access → Add IP Address');
       console.error('   - Add your current IP or use 0.0.0.0/0 for development (NOT recommended for production)');
       console.error('   - URL: https://cloud.mongodb.com/v2#/security/network/list');
+    } else {
+      console.error('\n🔍 Connection String format should be:');
+      console.error('   mongodb+srv://username:password@cluster.mongodb.net/database?retryWrites=true&w=majority');
     }
-  });
-} else {
-  console.warn('⚠️ MONGO_URL environment variable is not set');
-}
+
+    // In development, don't crash the app
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('\n⚠️ Continuing without database connection (development mode)');
+    }
+  }
+};
+
+connectDB();
 
 // Export for Vercel serverless functions
 module.exports = app;
