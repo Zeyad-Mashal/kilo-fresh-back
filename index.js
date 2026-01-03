@@ -43,40 +43,6 @@ app.use(cors(corsOptions));
 app.use(express.json({ limit: '4.5mb' }));
 app.use(express.urlencoded({ extended: true, limit: '4.5mb' }));
 
-// Middleware to ensure MongoDB connection before database operations
-app.use(async (req, res, next) => {
-  // Skip connection check for OPTIONS requests
-  if (req.method === 'OPTIONS') {
-    return next();
-  }
-
-  try {
-    // Ensure MongoDB is connected (uses cached connection for serverless)
-    await connectDB();
-
-    // Check if connection is ready
-    if (mongoose.connection.readyState !== 1) {
-      throw new Error('MongoDB connection not ready');
-    }
-
-    next();
-  } catch (error) {
-    console.error('Database connection error:', error.message);
-
-    // Set CORS headers even on connection errors
-    const origin = req.headers.origin;
-    res.header('Access-Control-Allow-Origin', origin || '*');
-    res.header('Access-Control-Allow-Credentials', 'true');
-    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin');
-
-    return res.status(503).json({
-      message: 'Database connection unavailable. Please check your MongoDB connection settings.',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
-  }
-});
-
 const { CategoriesRouter, ProductsRouter, CartRouter, OrdersRouter } = require('./routes/route');
 
 app.use('/api/categories', CategoriesRouter);
@@ -106,6 +72,14 @@ app.use((err, req, res, next) => {
 
   console.error('Error:', err);
 
+  // Handle MongoDB connection errors
+  if (err.name === 'MongoServerError' || err.name === 'MongooseError' || err.message?.includes('buffering timed out') || err.message?.includes('connect ECONNREFUSED') || err.message?.includes('serverSelectionTimeoutMS')) {
+    return res.status(503).json({
+      message: 'Database connection unavailable. Please check your MongoDB connection settings and ensure your IP is whitelisted in MongoDB Atlas.',
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
+  }
+
   // Handle payload too large errors (413)
   if (err.status === 413 || err.type === 'entity.too.large' || err.message?.includes('too large')) {
     return res.status(413).json({
@@ -121,7 +95,7 @@ app.use((err, req, res, next) => {
 });
 
 // Initialize MongoDB connection (uses cached connection pattern for serverless)
-// Connection is checked in middleware before each request
+// Connection is attempted in the background and cached for reuse
 if (process.env.MONGO_URL) {
   connectDB().catch((err) => {
     console.error('❌ MongoDB connection error:', err.message);
