@@ -2,6 +2,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 require('dotenv').config();
 const cors = require('cors');
+const connectDB = require('./lib/db');
 const app = express();
 
 // Manual CORS headers middleware (runs before everything)
@@ -42,12 +43,46 @@ app.use(cors(corsOptions));
 app.use(express.json({ limit: '4.5mb' }));
 app.use(express.urlencoded({ extended: true, limit: '4.5mb' }));
 
+// Middleware to ensure MongoDB connection before database operations
+app.use(async (req, res, next) => {
+  // Skip connection check for OPTIONS requests
+  if (req.method === 'OPTIONS') {
+    return next();
+  }
+
+  try {
+    // Ensure MongoDB is connected (uses cached connection for serverless)
+    await connectDB();
+
+    // Check if connection is ready
+    if (mongoose.connection.readyState !== 1) {
+      throw new Error('MongoDB connection not ready');
+    }
+
+    next();
+  } catch (error) {
+    console.error('Database connection error:', error.message);
+
+    // Set CORS headers even on connection errors
+    const origin = req.headers.origin;
+    res.header('Access-Control-Allow-Origin', origin || '*');
+    res.header('Access-Control-Allow-Credentials', 'true');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin');
+
+    return res.status(503).json({
+      message: 'Database connection unavailable. Please check your MongoDB connection settings.',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
 const { CategoriesRouter, ProductsRouter, CartRouter, OrdersRouter } = require('./routes/route');
 
-app.use(CategoriesRouter);
-app.use(ProductsRouter);
-app.use(CartRouter);
-app.use(OrdersRouter);
+app.use('/api/categories', CategoriesRouter);
+app.use('/api/products', ProductsRouter);
+app.use('/api', CartRouter);
+app.use('/api', OrdersRouter);
 
 app.get('/', (req, res) => {
   res.send('Hello World');
@@ -85,17 +120,32 @@ app.use((err, req, res, next) => {
   });
 });
 
-// MongoDB connection with better error handling
-mongoose.connect(process.env.MONGO_URL, {
-  serverSelectionTimeoutMS: 5000,
-  socketTimeoutMS: 45000,
-})
-  .then(() => {
-    console.log('✅ MongoDB connected successfully');
-  })
-  .catch((err) => {
+// Initialize MongoDB connection (uses cached connection pattern for serverless)
+// Connection is checked in middleware before each request
+if (process.env.MONGO_URL) {
+  connectDB().catch((err) => {
     console.error('❌ MongoDB connection error:', err.message);
+
+    // Provide helpful troubleshooting information
+    if (err.message.includes('authentication failed')) {
+      console.error('\n🔐 Authentication Error: Check your MongoDB username and password in the connection string');
+    } else if (err.message.includes('ENOTFOUND') || err.message.includes('getaddrinfo')) {
+      console.error('\n🌐 DNS/Network Error: Check your MongoDB connection string format');
+      console.error('Expected format: mongodb+srv://username:password@cluster.mongodb.net/database');
+    } else if (err.message.includes('timed out') || err.message.includes('serverSelectionTimeoutMS')) {
+      console.error('\n⏱️ Connection Timeout: Possible issues:');
+      console.error('1. Your IP address is not whitelisted in MongoDB Atlas');
+      console.error('2. Network/firewall blocking the connection');
+      console.error('3. MongoDB Atlas cluster is paused or unavailable');
+      console.error('\n📝 To whitelist your IP:');
+      console.error('   - Go to MongoDB Atlas → Network Access → Add IP Address');
+      console.error('   - Add your current IP or use 0.0.0.0/0 for development (NOT recommended for production)');
+      console.error('   - URL: https://cloud.mongodb.com/v2#/security/network/list');
+    }
   });
+} else {
+  console.warn('⚠️ MONGO_URL environment variable is not set');
+}
 
 // Export for Vercel serverless functions
 module.exports = app;
