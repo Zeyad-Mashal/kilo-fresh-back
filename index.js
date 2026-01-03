@@ -44,10 +44,10 @@ app.use(express.urlencoded({ extended: true, limit: '4.5mb' }));
 
 const { CategoriesRouter, ProductsRouter, CartRouter, OrdersRouter } = require('./routes/route');
 
-app.use('/api/categories', CategoriesRouter);
-app.use('/api/products', ProductsRouter);
-app.use('/api', CartRouter);
-app.use('/api', OrdersRouter);
+app.use(CategoriesRouter);
+app.use(ProductsRouter);
+app.use(CartRouter);
+app.use(OrdersRouter);
 
 app.get('/', (req, res) => {
   res.send('Hello World');
