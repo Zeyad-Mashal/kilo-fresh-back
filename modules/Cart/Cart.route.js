@@ -7,21 +7,22 @@ const {
   deleteCartItem,
   clearCart
 } = require('./Controller/Cart.Controller');
+const ensureDBConnection = require('../../middleware/dbConnection');
 
 // Add to Cart
-router.post('/addToCart', addToCart);
+router.post('/addToCart', ensureDBConnection, addToCart);
 
 // Get Cart Items
-router.get('/cart/getItems', getCartItems);
+router.get('/cart/getItems', ensureDBConnection, getCartItems);
 
 // Update Cart Item Quantity
-router.put('/cart/updateQuantity/:id', updateCartQuantity);
+router.put('/cart/updateQuantity/:id', ensureDBConnection, updateCartQuantity);
 
 // Delete Cart Item
-router.delete('/cart/deleteItem/:id', deleteCartItem);
+router.delete('/cart/deleteItem/:id', ensureDBConnection, deleteCartItem);
 
 // Clear Cart (Optional)
-router.delete('/cart/clear', clearCart);
+router.delete('/cart/clear', ensureDBConnection, clearCart);
 
 module.exports = router;
 

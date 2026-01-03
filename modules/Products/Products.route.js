@@ -11,30 +11,31 @@ const {
   searchProducts
 } = require('./Controller/Products.Controller');
 const { uploadProducts } = require('../../middleware/upload');
+const ensureDBConnection = require('../../middleware/dbConnection');
 
 // Create Product
-router.post('/addProduct', uploadProducts.array('images', 10), createProduct);
+router.post('/addProduct', ensureDBConnection, uploadProducts.array('images', 10), createProduct);
 
 // Get All Products
-router.get('/product/getAll', getAllProducts);
+router.get('/product/getAll', ensureDBConnection, getAllProducts);
 
 // Search Products
-router.get('/product/search', searchProducts);
+router.get('/product/search', ensureDBConnection, searchProducts);
 
 // Get All Offered Products
-router.get('/product/offers', getAllOfferedProducts);
+router.get('/product/offers', ensureDBConnection, getAllOfferedProducts);
 
 // Get Products By Category
-router.get('/product/getByCategory/:categoryId', getProductsByCategory);
+router.get('/product/getByCategory/:categoryId', ensureDBConnection, getProductsByCategory);
 
 // Get Product By ID
-router.get('/product/getById/:id', getProductById);
+router.get('/product/getById/:id', ensureDBConnection, getProductById);
 
 // Update Product
-router.put('/updateProduct/:id', uploadProducts.array('images', 10), updateProduct);
+router.put('/updateProduct/:id', ensureDBConnection, uploadProducts.array('images', 10), updateProduct);
 
 // Delete Product
-router.delete('/deleteProduct/:id', deleteProduct);
+router.delete('/deleteProduct/:id', ensureDBConnection, deleteProduct);
 
 module.exports = router;
 
