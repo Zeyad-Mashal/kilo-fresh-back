@@ -29,7 +29,7 @@ router.get('/product/offers', ensureDBConnection, getAllOfferedProducts);
 router.get('/product/getByCategory/:categoryId', ensureDBConnection, getProductsByCategory);
 
 // Get Product By ID
-router.get('/product/getById/:id', ensureDBConnection, getProductById);
+router.get('/product/:id', ensureDBConnection, getProductById);
 
 // Update Product
 router.put('/updateProduct/:id', ensureDBConnection, uploadProducts.array('images', 10), updateProduct);
